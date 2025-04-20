@@ -1,0 +1,33 @@
+{
+  "name": "slack-chatgpt-connector",
+  "version": "0.1.0",
+  "description": "A Slack integration to send thread content to ChatGPT",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "keywords": [
+    "slack",
+    "chatgpt",
+    "openai",
+    "integration"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@slack/bolt": "^4.2.1",
+    "@slack/web-api": "^7.9.1",
+    "@vercel/kv": "^3.0.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.5.0",
+    "openai": "^4.95.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@vercel/node": "^5.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
