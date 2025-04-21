@@ -1,5 +1,4 @@
-///@ts-nocheck
- 
+//@ts-nocheck
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { WebClient } from '@slack/web-api';
 import axios from 'axios';
@@ -57,23 +56,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Parse Slack command payload
     const payload = req.body;
-    console.log('Command text:', payload.text);
+    const text = payload.text || '';
+    const responseUrl = payload.response_url;
     
-    // Send immediate acknowledgment
-    res.status(200).json({
-      response_type: 'in_channel',
-      text: 'Fetching thread content...'
-    });
+    console.log('Command text:', text);
+    console.log('Response URL:', responseUrl ? 'exists' : 'missing');
     
-    // Get thread link from command text
-    const threadLink = payload.text?.trim();
+    // Process thread link
+    const threadLink = text.trim();
     
     if (!threadLink) {
-      await axios.post(payload.response_url, {
+      console.log('No thread link provided');
+      return res.status(200).json({
         response_type: 'ephemeral',
         text: 'Please provide a thread link. Usage: `/fetch-thread <thread_link>`'
       });
-      return;
     }
     
     // Parse thread link
@@ -81,11 +78,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const threadInfo = parseThreadLink(threadLink);
     
     if (!threadInfo) {
-      await axios.post(payload.response_url, {
+      console.log('Invalid thread link format');
+      return res.status(200).json({
         response_type: 'ephemeral',
         text: 'Invalid thread link format. Please provide a valid Slack thread link.'
       });
-      return;
     }
     
     console.log('Thread info:', threadInfo);
@@ -100,11 +97,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       
       if (!response.messages || response.messages.length === 0) {
-        await axios.post(payload.response_url, {
+        console.log('No messages found in thread');
+        return res.status(200).json({
           response_type: 'ephemeral',
           text: 'No messages found in this thread.'
         });
-        return;
       }
       
       console.log(`Found ${response.messages.length} messages in thread`);
@@ -123,19 +120,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
       
-      // Send response back to Slack
-      await axios.post(payload.response_url, {
+      console.log('Sending formatted thread content response');
+      return res.status(200).json({
         response_type: 'in_channel',
         text: formattedText
       });
       
-      console.log('Successfully sent thread content to Slack');
-      
     } catch (error) {
       console.error('Error fetching thread messages:', error);
-      
-      // Send error back to Slack
-      await axios.post(payload.response_url, {
+      return res.status(200).json({
         response_type: 'ephemeral',
         text: `Error fetching thread messages: ${error.message || 'Unknown error'}`
       });
@@ -143,13 +136,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
   } catch (error) {
     console.error('Error handling command:', error);
-    
-    // Try to send error response to Slack
-    if (req.body && req.body.response_url) {
-      await axios.post(req.body.response_url, {
-        response_type: 'ephemeral',
-        text: `Error: ${error.message || 'Unknown error'}`
-      });
-    }
+    return res.status(200).json({
+      response_type: 'ephemeral',
+      text: `Error: ${error.message || 'Unknown error'}`
+    });
   }
 }
