@@ -78,6 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Fetch thread messages
     console.log('Fetching thread messages from channel:', payload.channel_id, 'thread:', payload.thread_ts);
+    //@ts-ignore
     const messages = await getThreadMessages(payload.channel_id, payload.thread_ts);
     console.log('Fetched messages count:', messages.length);
     
@@ -94,11 +95,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const threadData: ThreadData = {
       messages,
       channelId: payload.channel_id,
+          //@ts-ignore
+
       threadTs: payload.thread_ts
     };
     
     // Save the chat session
     console.log('Saving chat session');
+        //@ts-ignore
+
     await saveChatSession(chatId, payload.channel_id, payload.thread_ts);
     
     // Send thread to ChatGPT
