@@ -9,6 +9,45 @@ import {
 import { sendThreadToChatGPT } from '../openai';
 import axios from 'axios';
 
+// Function to parse thread link or ID
+function parseThreadInfo(input: string): { channelId: string, threadTs: string } | null {
+  try {
+    // Handle full Slack URL
+    if (input.includes('/archives/')) {
+      const archivePart = input.split('/archives/')[1];
+      const parts = archivePart.split('/');
+      if (parts.length >= 2) {
+        const channelId = parts[0];
+        // Convert pXXXXXXXXXX format to X.XXXXXX format that Slack API expects
+        let threadTs = parts[1];
+        if (threadTs.startsWith('p')) {
+          const tsNumber = threadTs.substring(1);
+          threadTs = `${tsNumber.substring(0, 10)}.${tsNumber.substring(10)}`;
+        }
+        return { channelId, threadTs };
+      }
+    }
+    // Handle just the part after /archives/
+    else if (input.includes('/')) {
+      const parts = input.split('/');
+      if (parts.length >= 2) {
+        const channelId = parts[0];
+        // Convert pXXXXXXXXXX format to X.XXXXXX format
+        let threadTs = parts[1];
+        if (threadTs.startsWith('p')) {
+          const tsNumber = threadTs.substring(1);
+          threadTs = `${tsNumber.substring(0, 10)}.${tsNumber.substring(10)}`;
+        }
+        return { channelId, threadTs };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error parsing thread info:', error);
+    return null;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Log incoming request
   console.log('Received request:', {
@@ -49,7 +88,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('SLACK_SIGNING_SECRET is not set');
     }
     
-    
     console.log('Signature verification bypassed for debugging');
 
     // Parse Slack command payload
@@ -61,25 +99,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       response_type: 'in_channel',
       text: 'Processing your request...'
     });
+
+    // Parse the command text to get thread link and optional chat ID
+    const params = payload.text.trim().split(/\s+/);
+    let threadLink = '';
+    let chatId = '';
     
-    // Check if we're in a thread
-    if (!payload.thread_ts) {
-      console.log('Not in a thread - sending error response');
+    if (params.length >= 1) {
+      threadLink = params[0];
+    }
+    
+    if (params.length >= 2) {
+      chatId = params[1];
+    }
+    
+    // If no thread link provided, return error
+    if (!threadLink) {
+      console.log('No thread link provided');
       await axios.post(payload.response_url, {
         response_type: 'ephemeral',
-        text: 'This command must be used within a thread.'
+        text: 'Please provide a thread link. Usage: `/chatgpt <thread_link> [chat_id]`'
       });
       return;
     }
     
-    // Get chat_id from command text or generate a new one
-    const chatId = payload.text.trim() || generateChatId();
-    console.log('Using chat ID:', chatId);
+    // Parse thread info from link
+    const threadInfo = parseThreadInfo(threadLink);
+    if (!threadInfo) {
+      console.log('Invalid thread link format');
+      await axios.post(payload.response_url, {
+        response_type: 'ephemeral',
+        text: 'Invalid thread link format. Please provide a valid Slack thread link.'
+      });
+      return;
+    }
+    
+    console.log('Parsed thread info:', threadInfo);
+    
+    // Generate chat ID if not provided
+    if (!chatId) {
+      chatId = generateChatId();
+      console.log('Generated new chat ID:', chatId);
+    } else {
+      console.log('Using provided chat ID:', chatId);
+    }
     
     // Fetch thread messages
-    console.log('Fetching thread messages from channel:', payload.channel_id, 'thread:', payload.thread_ts);
-    //@ts-ignore
-    const messages = await getThreadMessages(payload.channel_id, payload.thread_ts);
+    console.log('Fetching thread messages from channel:', threadInfo.channelId, 'thread:', threadInfo.threadTs);
+    const messages = await getThreadMessages(threadInfo.channelId, threadInfo.threadTs);
     console.log('Fetched messages count:', messages.length);
     
     if (messages.length === 0) {
@@ -94,17 +161,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Create thread data
     const threadData: ThreadData = {
       messages,
-      channelId: payload.channel_id,
-          //@ts-ignore
-
-      threadTs: payload.thread_ts
+      channelId: threadInfo.channelId,
+      threadTs: threadInfo.threadTs
     };
     
     // Save the chat session
     console.log('Saving chat session');
-        //@ts-ignore
-
-    await saveChatSession(chatId, payload.channel_id, payload.thread_ts);
+    await saveChatSession(chatId, threadInfo.channelId, threadInfo.threadTs);
     
     // Send thread to ChatGPT
     console.log('Sending thread to ChatGPT');
@@ -115,7 +178,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Sending response back to Slack');
     await axios.post(payload.response_url, {
       response_type: 'in_channel',
-      text: `*ChatGPT Response:*\n\n${response}\n\n_To continue this conversation, use \`/chatgpt ${chatId}\` in another thread._`
+      text: `*ChatGPT Response:*\n\n${response}\n\n_Chat ID: \`${chatId}\` - To continue this conversation, use \`/chatgpt <thread_link> ${chatId}\` with another thread._`
     });
     console.log('Successfully sent response to Slack');
     
