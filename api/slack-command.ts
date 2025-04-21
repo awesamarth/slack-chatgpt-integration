@@ -49,21 +49,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('SLACK_SIGNING_SECRET is not set');
     }
     
-    // For debugging, temporarily bypass signature verification
-    /* 
-    // Comment out the verification logic for testing
-    const isValidRequest = verifySlackRequest(
-      process.env.SLACK_SIGNING_SECRET,
-      slackSignature,
-      slackTimestamp,
-      rawBody
-    );
-    
-    if (!isValidRequest) {
-      console.log('Unauthorized request - failed signature verification');
-      return res.status(401).send('Unauthorized');
-    }
-    */
     
     console.log('Signature verification bypassed for debugging');
 
@@ -71,11 +56,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const payload = req.body as SlackCommandPayload;
     console.log('Slack payload:', payload);
     
-    // Acknowledge the command quickly to prevent timeout
     console.log('Sending initial acknowledgment');
-    res.status(200).send({
+    return res.status(200).json({
       response_type: 'in_channel',
-      text: 'Processing your request, please wait...'
+      text: 'Processing your request...'
     });
     
     // Check if we're in a thread
