@@ -57,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Slack payload:', payload);
     
     console.log('Sending initial acknowledgment');
-    return res.status(200).json({
+    res.status(200).json({
       response_type: 'in_channel',
       text: 'Processing your request...'
     });
