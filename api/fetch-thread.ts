@@ -5,7 +5,6 @@ import axios from 'axios';
 
 // Initialize Slack client
 const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
-console.log("token is here: ", process.env.SLACK_BOT_TOKEN)
 
 // Parse thread link
 function parseThreadLink(link: string): { channelId: string, threadTs: string } | null {
@@ -54,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     console.log('Thread fetch request received');
+    console.log("token is here: ", process.env.SLACK_BOT_TOKEN)
+
     
     // Parse Slack command payload
     const payload = req.body;
