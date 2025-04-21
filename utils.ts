@@ -1,6 +1,5 @@
 import { WebClient } from '@slack/web-api';
-import { kv } from '@vercel/kv';
-import { ChatSession, ThreadData, ThreadMessage } from './types';
+import { ThreadData, ThreadMessage } from './types';
 import crypto from 'crypto';
 
 // Initialize Slack client
@@ -8,38 +7,65 @@ export const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 // Generate a unique chat ID
 export function generateChatId(): string {
-  return crypto.randomBytes(8).toString('hex');
+  return crypto.randomBytes(4).toString('hex');
 }
 
-// Verify Slack request signature
-export function verifySlackRequest(
-  signingSecret: string,
-  requestSignature: string,
-  timestamp: string,
-  body: string
-): boolean {
-  const baseString = `v0:${timestamp}:${body}`;
-  const hmac = crypto.createHmac('sha256', signingSecret).update(baseString).digest('hex');
-  const computedSignature = `v0=${hmac}`;
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(computedSignature),
-    Buffer.from(requestSignature)
-  );
+// Parse thread link to get channel ID and thread timestamp
+export function parseThreadLink(link: string): { channelId: string, threadTs: string } | null {
+  try {
+    // Handle full Slack URL
+    if (link.includes('/archives/')) {
+      const archivePart = link.split('/archives/')[1];
+      const parts = archivePart.split('/');
+      if (parts.length >= 2) {
+        const channelId = parts[0];
+        // Convert pXXXXXXXXXX format to X.XXXXXX format that Slack API expects
+        let threadTs = parts[1];
+        if (threadTs.startsWith('p')) {
+          const tsNumber = threadTs.substring(1);
+          threadTs = `${tsNumber.substring(0, 10)}.${tsNumber.substring(10)}`;
+        }
+        return { channelId, threadTs };
+      }
+    }
+    // Handle just the part after /archives/
+    else if (link.includes('/')) {
+      const parts = link.split('/');
+      if (parts.length >= 2) {
+        const channelId = parts[0];
+        // Convert pXXXXXXXXXX format to X.XXXXXX format
+        let threadTs = parts[1];
+        if (threadTs.startsWith('p')) {
+          const tsNumber = threadTs.substring(1);
+          threadTs = `${tsNumber.substring(0, 10)}.${tsNumber.substring(10)}`;
+        }
+        return { channelId, threadTs };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error parsing thread link:', error);
+    return null;
+  }
 }
 
 // Fetch thread messages from Slack
 export async function getThreadMessages(channelId: string, threadTs: string): Promise<ThreadMessage[]> {
   try {
+    console.log(`Fetching messages for channel: ${channelId}, thread: ${threadTs}`);
+    
     const response = await slackClient.conversations.replies({
       channel: channelId,
       ts: threadTs,
     });
 
     if (!response.messages || response.messages.length === 0) {
+      console.log('No messages found in thread');
       return [];
     }
 
+    console.log(`Found ${response.messages.length} messages in thread`);
+    
     return response.messages.map(msg => {
       // Create a base message object
       const messageObj: ThreadMessage = {
@@ -57,49 +83,6 @@ export async function getThreadMessages(channelId: string, threadTs: string): Pr
     });
   } catch (error) {
     console.error('Error fetching thread messages:', error);
-    throw error;
-  }
-}
-
-// Save chat session to database
-export async function saveChatSession(chatId: string, channelId: string, threadTs: string): Promise<void> {
-  try {
-    // Check if session already exists
-    const existingSession = await kv.get<ChatSession>(`chat:${chatId}`);
-    
-    if (existingSession) {
-      // Update existing session
-      const threadExists = existingSession.threads.some(
-        t => t.channelId === channelId && t.threadTs === threadTs
-      );
-      
-      if (!threadExists) {
-        existingSession.threads.push({ channelId, threadTs });
-        existingSession.updatedAt = Date.now();
-        await kv.set(`chat:${chatId}`, existingSession);
-      }
-    } else {
-      // Create new session
-      const newSession: ChatSession = {
-        id: chatId,
-        threads: [{ channelId, threadTs }],
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      await kv.set(`chat:${chatId}`, newSession);
-    }
-  } catch (error) {
-    console.error('Error saving chat session:', error);
-    throw error;
-  }
-}
-
-// Get chat session from database
-export async function getChatSession(chatId: string): Promise<ChatSession | null> {
-  try {
-    return await kv.get<ChatSession>(`chat:${chatId}`);
-  } catch (error) {
-    console.error('Error getting chat session:', error);
     throw error;
   }
 }

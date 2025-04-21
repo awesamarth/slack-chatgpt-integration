@@ -11,19 +11,9 @@ export interface ThreadMessage {
     threadTs: string;
   }
   
-  export interface ChatSession {
-    id: string;
-    threads: {
-      channelId: string;
-      threadTs: string;
-    }[];
-    createdAt: number;
-    updatedAt: number;
-  }
-  
   export interface SlackCommandPayload {
     command: string;
-    text: string; // This will contain our chat_id
+    text: string;
     response_url: string;
     trigger_id: string;
     user_id: string;
